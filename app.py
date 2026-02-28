@@ -6,95 +6,91 @@ import requests
 from datetime import datetime
 
 # --- CONFIGURATION ---
-st.set_page_config(page_title="Morel Sniper - Tavernes", page_icon="🎯", layout="wide")
+st.set_page_config(page_title="Morel AI - Tavernes", page_icon="🍄", layout="wide")
 
-# --- FONCTIONS MÉTÉO ---
+# --- 1. RÉCUPÉRATION MÉTÉO ---
 def get_weather():
     try:
+        # Coordonnées Tavernes
         url = "https://api.open-meteo.com/v1/forecast?latitude=43.59&longitude=6.01&daily=precipitation_sum,temperature_2m_max&timezone=Europe%2FBerlin"
         data = requests.get(url, timeout=5).json()
-        return sum(data['daily']['precipitation_sum'][:7]), data['daily']['temperature_2m_max'][0]
-    except: return 0.0, 0.0
+        precip_7j = sum(data['daily']['precipitation_sum'][:7])
+        tmax = data['daily']['temperature_2m_max'][0]
+        return precip_7j, tmax
+    except:
+        return 0.0, 0.0
 
 precip, tmax = get_weather()
 
-# --- INTERFACE ---
-st.title("🎯 Morel Sniper : Tavernes & Alentours")
-st.sidebar.title("🔍 Filtres Experts")
+# --- 2. CALCUL DE LA PROBABILITÉ (LOGIQUE 90%) ---
+# La morille sort si : il a plu (>15mm) et qu'il fait doux (12-20°C)
+is_ideal = precip >= 15 and 12 <= tmax <= 20
 
-# Aide à la lecture géologique
-with st.sidebar.expander("💎 Guide des Roches", expanded=True):
-    st.write("**Cherchez ces codes sur la carte :**")
-    st.info("✅ **j2, j3, j4** : Calcaires Jurassique (Le TOP)")
-    st.info("✅ **n1, n2** : Crétacé inférieur (Très bon)")
-    st.error("❌ **m, p** : Argiles/Sables (Mauvais)")
+# --- 3. BARRE LATÉRALE (INDICATEURS) ---
+st.sidebar.title("📊 Analyse en temps réel")
+st.sidebar.metric("Pluie (7 derniers jours)", f"{precip} mm")
+st.sidebar.metric("Température Max", f"{tmax} °C")
 
-# --- CARTE DE HAUTE PRÉCISION ---
+st.sidebar.markdown("---")
+if is_ideal:
+    st.sidebar.success("🚀 CONDITIONS IDÉALES (90%) : Les spots sont visibles sur la carte !")
+    chance_score = 90
+else:
+    st.sidebar.warning("⏳ ATTENDRE LA PLUIE : Le sol est trop sec. Spots masqués.")
+    chance_score = 30
+
+# --- 4. LISTE DES SPOTS STRATÉGIQUES (Tavernes) ---
+# Ces points n'apparaissent que si is_ideal est vrai
+spots = [
+    {"name": "Vallon des Ferrages (Humide)", "lat": 43.5982, "lon": 6.0251, "desc": "Fond de thalweg, zone calcaire j2."},
+    {"name": "Pied du Petit Bessillon", "lat": 43.5850, "lon": 6.0120, "desc": "Adret calcaire sous les frênes."},
+    {"name": "Ravin de la Blanquière", "lat": 43.6050, "lon": 6.0350, "desc": "Zone très ombragée, idéal fin de saison."},
+    {"name": "Source de l'Argens (Secteur)", "lat": 43.5910, "lon": 5.9980, "desc": "Proximité eau + calcaire dur."}
+]
+
+# --- 5. CARTE ---
+st.title("🍄 Morel AI : Cartographie Prédictive")
+
 m = folium.Map(location=[43.5936, 6.0167], zoom_start=14, tiles=None)
 
-# 1. FOND DE CARTE RELIEF (Indispensable pour voir les vallons)
-folium.TileLayer(
-    tiles='https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
-    attr='OpenTopoMap', name='1. Relief & Courbes de niveau'
-).add_to(m)
+# Couches de base
+folium.TileLayer(tiles='https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', attr='OpenTopoMap', name='Relief').add_to(m)
 
-# 2. COUCHE HYDROGRAPHIE (Ruisseaux et Sources)
-# C'est ici que l'humidité se concentre
-folium.WmsTileLayer(
-    url="https://data.geopf.ign.fr/wms-r/wms",
-    layers="HYDROGRAPHY.NETWORK",
-    fmt="image/png", transparent=True,
-    name="2. Rivières & Ruisseaux (L'Humidité)",
-    overlay=True, opacity=0.8, attr="IGN"
-).add_to(m)
-
-# 3. COUCHE GÉOLOGIE (BRGM)
+# Couche GÉOLOGIE (BRGM)
 folium.WmsTileLayer(
     url="https://geoservices.brgm.fr/geologie",
-    layers="GEOLOGIE",
-    fmt="image/png", transparent=True,
-    name="3. Nature du Sol (Chercher Bleu/Vert)",
-    overlay=True, opacity=0.5, attr="BRGM"
+    layers="GEOLOGIE", fmt="image/png", transparent=True,
+    name="Géologie (Bleu = Calcaire)", overlay=True, opacity=0.5
 ).add_to(m)
 
-# 4. COUCHE VÉGÉTATION DÉTAILLÉE
+# Couche HYDRO (Réseau d'eau)
 folium.WmsTileLayer(
     url="https://data.geopf.ign.fr/wms-r/wms",
-    layers="LANDCOVER.FORESTINVENTORY.V2",
-    fmt="image/png", transparent=True,
-    name="4. Forêts (Chercher Feuillus)",
-    overlay=True, opacity=0.4, attr="IGN"
+    layers="HYDROGRAPHY.NETWORK", fmt="image/png", transparent=True,
+    name="Ruisseaux (Humidité)", overlay=True, opacity=0.7
 ).add_to(m)
 
-# --- AJOUT DE POINTS STRATÉGIQUES (EXEMPLES) ---
-# Vous pouvez ajouter vos propres points ici
-folium.Marker(
-    [43.598, 6.025], 
-    popup="Vallon Humide + Calcaire (Zone à fort potentiel)",
-    icon=folium.Icon(color='green', icon='leaf')
-).add_to(m)
+# LOGIQUE D'AFFICHAGE DES MARQUEURS
+if is_ideal:
+    for spot in spots:
+        folium.Marker(
+            location=[spot["lat"], spot["lon"]],
+            popup=f"<b>{spot['name']}</b><br>{spot['desc']}",
+            icon=folium.Icon(color='green', icon='info-sign')
+        ).add_to(m)
+else:
+    # On met un seul marqueur informatif si les conditions ne sont pas réunies
+    folium.Marker(
+        location=[43.5936, 6.0167],
+        popup="Revenez après la pluie pour voir les points chauds.",
+        icon=folium.Icon(color='red', icon='time')
+    ).add_to(m)
 
-# --- OUTILS SUPPLÉMENTAIRES ---
+# Outils
 plugins.LocateControl(flyTo=True).add_to(m)
-plugins.Fullscreen().add_to(m)
 folium.LayerControl(collapsed=False).add_to(m)
 
 # Affichage
 st_folium(m, width="100%", height=700)
 
-# --- CONSEILS DE CHASSE ---
-st.markdown("---")
-col1, col2 = st.columns(2)
-with col1:
-    st.subheader("📍 Où regarder précisément ?")
-    st.write("""
-    1. **Les Talus :** Souvent la terre est remuée, les morilles adorent ça.
-    2. **Les zones de brûlis :** Si un feu a eu lieu il y a 1 ou 2 ans, c'est le jackpot.
-    3. **Sous les Frênes :** Arbre n°1 à Tavernes pour la morille. Reconnaissable à ses bourgeons noirs.
-    """)
-with col2:
-    st.subheader("🌡️ Le Timing")
-    if tmax > 15:
-        st.success(f"Il fait {tmax}°C. Si le sol est humide, les morilles poussent en ce moment !")
-    else:
-        st.info("Encore un peu frais. Attendez une journée ensoleillée après la pluie.")
+st.info("💡 Note : Les marqueurs 'Sniper' ne s'activent que lorsque le cumul de pluie dépasse 15mm sur 7 jours.")
