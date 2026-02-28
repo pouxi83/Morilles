@@ -5,121 +5,75 @@ from streamlit_folium import st_folium
 import requests
 from datetime import datetime
 
-# --- CONFIGURATION DE LA PAGE ---
-st.set_page_config(
-    page_title="Morel Sniper Pro - Tavernes",
-    page_icon="🎯",
-    layout="wide"
-)
+# --- CONFIGURATION ---
+st.set_page_config(page_title="Morel Hunter - Haut-Var", page_icon="🍄", layout="wide")
 
-# --- 1. FONCTIONS TECHNIQUES (MÉTÉO & LOGIQUE) ---
+# --- 1. MÉTÉO ÉLARGIE ---
 def get_weather():
     try:
-        # Coordonnées Tavernes (Var)
-        url = "https://api.open-meteo.com/v1/forecast?latitude=43.59&longitude=6.01&daily=precipitation_sum,temperature_2m_max&timezone=Europe%2FBerlin"
+        # Coordonnées centrales du Haut-Var
+        url = "https://api.open-meteo.com/v1/forecast?latitude=43.60&longitude=6.05&daily=precipitation_sum,temperature_2m_max&timezone=Europe%2FBerlin"
         data = requests.get(url, timeout=5).json()
-        precip_7j = sum(data['daily']['precipitation_sum'][:7])
-        tmax = data['daily']['temperature_2m_max'][0]
-        return precip_7j, tmax
-    except:
-        return 0.0, 15.0 # Valeurs par défaut si l'API échoue
+        return sum(data['daily']['precipitation_sum'][:7]), data['daily']['temperature_2m_max'][0]
+    except: return 0.0, 15.0
 
 precip_reelle, tmax = get_weather()
 
-# --- 2. INTERFACE LATÉRALE (DASHBOARD) ---
-st.sidebar.title("🍄 Contrôle Sniper")
-
-# Mode Simulation
-st.sidebar.subheader("🛠️ Simulation")
-mode_test = st.sidebar.checkbox("Forcer Mode Pluie (>15mm)", value=True)
+# --- 2. INTERFACE & SIMULATION ---
+st.sidebar.title("🧭 Prospection Haut-Var")
+mode_test = st.sidebar.checkbox("Activer Zones de Chasse", value=True)
+alt_target = st.sidebar.slider("Altitude cible (m)", 300, 1000, 450)
 precip = 20.0 if mode_test else precip_reelle
-
-# Analyse Altitude
-st.sidebar.markdown("---")
-st.sidebar.subheader("📐 Analyse Altitude")
-alt_target = st.sidebar.slider("Altitude de recherche (m)", 300, 1000, 450)
-
-# Conditions de pousse
 is_ideal = precip >= 15 and 10 <= tmax <= 22
 
-if is_ideal:
-    st.sidebar.success(f"🚀 CONDITIONS IDÉALES\nPluie: {precip}mm | T°: {tmax}°C")
-else:
-    st.sidebar.warning(f"⏳ ATTENDRE LA PLUIE\nPluie: {precip}mm | T°: {tmax}°C")
-
-# --- 3. LÉGENDE TECHNIQUE ---
-with st.sidebar.expander("📚 Légende des Couches", expanded=True):
-    st.write("🔵 **Lignes Bleues** : Ruisseaux (L'Humidité)")
-    st.write("🟢 **Zones Vertes** : Feuillus (L'Habitat)")
-    st.write("🟡 **Zones Colorées** : Calcaire (Le Sol)")
-    st.write("🔴 **Cercles** : Zones à 90% de probabilité")
-
-# --- 4. DÉFINITION DES HOTSPOTS (Bases SIG) ---
+# --- 3. BASE DE DONNÉES DES HOTSPOTS ÉLARGIE ---
 hotspots = [
-    {"nom": "ZONE A : Vallon des Ferrages", "coords": [43.5985, 6.0260], "alt": 420, "info": "Calcaire dur + Thalweg humide."},
-    {"nom": "ZONE B : Pied du Petit Bessillon", "coords": [43.5875, 6.0145], "alt": 480, "info": "Éboulis calcaires et lierre."},
-    {"nom": "ZONE C : Ravin de la Blanquière", "coords": [43.6060, 6.0380], "alt": 510, "info": "Ubac frais (Exposition Nord-Est)."},
-    {"nom": "ZONE D : Marnes de Saint-Cassien", "coords": [43.5920, 5.9950], "alt": 395, "info": "Marnes argileuses (Morilles blondes)."},
-    {"nom": "ZONE E : Plateau des Lauves", "coords": [43.6120, 6.0180], "alt": 540, "info": "Bordures de plateau et cuvettes."}
+    # TAVERNES
+    {"nom": "Tavernes - Vallon des Ferrages", "coords": [43.5985, 6.0260], "alt": 420, "info": "Thalweg humide + Calcaire."},
+    {"nom": "Tavernes - Saint-Cassien", "coords": [43.5920, 5.9950], "alt": 395, "info": "Marnes argileuses."},
+    # FOX-AMPHOUX
+    {"nom": "Fox - Bois de la Plaine", "coords": [43.5950, 6.1020], "alt": 450, "info": "Chênes truffiers et lisières."},
+    {"nom": "Fox - Vieux Fox (Ubac)", "coords": [43.5820, 6.0950], "alt": 520, "info": "Pente Nord très humide."},
+    # MONTMEYAN
+    {"nom": "Montmeyan - Ravin du Beau de Ri", "coords": [43.6350, 6.0450], "alt": 480, "info": "Ravin calcaire très encaissé."},
+    {"nom": "Montmeyan - Plateau Sud", "coords": [43.6180, 6.0620], "alt": 550, "info": "Cuvettes de terre rouge."},
+    # VARAGES
+    {"nom": "Varages - Vallon de l'Orb", "coords": [43.5850, 5.9550], "alt": 360, "info": "Proximité de l'eau et des sources."},
+    {"nom": "Varages - Saint-Porphyre", "coords": [43.6050, 5.9420], "alt": 580, "info": "Zone de transition calcaire/forêt."},
+    # AUPS (Limite)
+    {"nom": "Aups - Contreforts du Verdon", "coords": [43.6450, 6.2050], "alt": 650, "info": "Altitude plus haute, idéal en avril."}
 ]
 
-# --- 5. CONSTRUCTION DE LA CARTE ---
-st.title("🎯 Morel Sniper : Cartographie Prédictive Tavernes")
+# --- 4. CARTE ---
+st.title("🍄 Morel Hunter : Secteur Tavernes - Fox - Montmeyan")
 
-# Centrage sur Tavernes
-m = folium.Map(location=[43.5936, 6.0167], zoom_start=14, tiles=None)
+# Centrage élargi
+m = folium.Map(location=[43.60, 6.05], zoom_start=12, tiles=None)
 
-# A. Fond Relief
-folium.TileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', attr='OpenTopoMap', name='1. Relief Topo').add_to(m)
+# Couches SIG
+folium.TileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', attr='OpenTopoMap', name='1. Relief').add_to(m)
 
-# B. Couche Végétation (IGN)
-folium.WmsTileLayer(
-    url="https://data.geopf.ign.fr/wms-r/wms",
-    layers="LANDCOVER.FORESTINVENTORY.V2",
-    name="2. Forêts (Feuillus)",
-    transparent=True, fmt="image/png", overlay=True, opacity=0.4, attr="IGN"
-).add_to(m)
+folium.WmsTileLayer(url="https://data.geopf.ign.fr/wms-r/wms", layers="LANDCOVER.FORESTINVENTORY.V2", 
+                    name="2. Végétation (Feuillus)", transparent=True, fmt="image/png", overlay=True, opacity=0.4).add_to(m)
 
-# C. Couche Géologie (BRGM)
-folium.WmsTileLayer(
-    url="https://geoservices.brgm.fr/geologie",
-    layers="GEOLOGIE",
-    name="3. Géologie (Calcaire)",
-    transparent=True, fmt="image/png", overlay=True, opacity=0.4, attr="BRGM"
-).add_to(m)
+folium.WmsTileLayer(url="https://geoservices.brgm.fr/geologie", layers="GEOLOGIE", 
+                    name="3. Géologie (Calcaire)", transparent=True, fmt="image/png", overlay=True, opacity=0.4).add_to(m)
 
-# D. Couche Hydrographie (IGN)
-folium.WmsTileLayer(
-    url="https://data.geopf.ign.fr/wms-r/wms",
-    layers="HYDROGRAPHY.NETWORK",
-    name="4. Ruisseaux (Eau)",
-    transparent=True, fmt="image/png", overlay=True, opacity=0.8, attr="IGN"
-).add_to(m)
+folium.WmsTileLayer(url="https://data.geopf.ign.fr/wms-r/wms", layers="HYDROGRAPHY.NETWORK", 
+                    name="4. Ruisseaux (Humidité)", transparent=True, fmt="image/png", overlay=True, opacity=0.7).add_to(m)
 
-# E. AFFICHAGE DES CIBLES SI CONDITIONS OK
+# AFFICHAGE DES CIBLES
 if is_ideal:
     for spot in hotspots:
-        # Filtrage par altitude (marge de 100m par rapport au curseur)
-        if abs(spot["alt"] - alt_target) <= 100:
+        # Filtre altitude +/- 150m
+        if abs(spot["alt"] - alt_target) <= 150:
             folium.Circle(
-                location=spot["coords"],
-                radius=200,
-                color="red",
-                fill=True,
-                fill_opacity=0.3,
+                location=spot["coords"], radius=300, color="red", fill=True, fill_opacity=0.3,
                 popup=f"<b>{spot['nom']}</b><br>Alt: {spot['alt']}m<br>{spot['info']}"
             ).add_to(m)
-            folium.Marker(
-                location=spot["coords"],
-                icon=folium.Icon(color='red', icon='screenshot', prefix='fa')
-            ).add_to(m)
 
-# --- 6. OUTILS & AFFICHAGE ---
-plugins.LocateControl(flyTo=True, keepCurrentZoomLevel=True).add_to(m)
-plugins.Fullscreen().add_to(m)
+# Outils
+plugins.LocateControl(flyTo=True).add_to(m)
 folium.LayerControl(collapsed=False).add_to(m)
 
-# Affichage final
 st_folium(m, width="100%", height=700)
-
-st.caption("Données : BRGM, IGN, Open-Meteo. Logiciel de prospection amateur.")
