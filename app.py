@@ -5,19 +5,17 @@ from streamlit_folium import st_folium
 import requests
 from datetime import datetime
 
-# --- CONFIGURATION DE L'APPARENCE ---
+# --- CONFIGURATION DE LA PAGE ---
 st.set_page_config(
-    page_title="Morilles Tavernes Pro",
+    page_title="Morel Hunter Pro - Tavernes",
     page_icon="🍄",
     layout="wide"
 )
 
-# --- FONCTIONS TECHNIQUES ---
-
+# --- FONCTIONS TECHNIQUES (MÉTÉO & ALTITUDE) ---
 def get_weather():
-    """Récupère la météo réelle de Tavernes via API"""
     try:
-        # Coordonnées de Tavernes (Var)
+        # Coordonnées Tavernes (Var)
         url = "https://api.open-meteo.com/v1/forecast?latitude=43.59&longitude=6.01&daily=precipitation_sum,temperature_2m_max,temperature_2m_min&timezone=Europe%2FBerlin"
         data = requests.get(url, timeout=5).json()
         precip_7j = sum(data['daily']['precipitation_sum'][:7])
@@ -28,94 +26,84 @@ def get_weather():
         return 0.0, 0.0, 0.0
 
 def get_ideal_altitude():
-    """Calcule l'altitude de pousse selon le jour de l'année"""
     day_of_year = datetime.now().timetuple().tm_yday
-    # La saison commence vers le jour 60 (1er mars) à 300m
+    # Saison commence jour 60 (1er mars) à 300m, monte de 8m/jour
     if day_of_year < 60: return 300
-    alt = 300 + ((day_of_year - 60) * 8) # Monte de 8m par jour
+    alt = 300 + ((day_of_year - 60) * 8)
     return min(int(alt), 1000)
 
-# --- CALCULS ---
+# --- PRÉPARATION DES DONNÉES ---
 precip, tmax, tmin = get_weather()
 ideal_alt = get_ideal_altitude()
-choc = tmax - tmin
 
-# --- INTERFACE LATÉRALE (SIDEBAR) ---
-st.sidebar.title("🌲 Menu Chasseur")
+# --- BARRE LATÉRALE (DASHBOARD) ---
+st.sidebar.title("🌲 Tableau de Bord")
 st.sidebar.metric("Altitude Idéale", f"{ideal_alt} m")
 
-st.sidebar.subheader("🌤️ Météo (Tavernes)")
-st.sidebar.write(f"Pluie 7j : **{precip} mm**")
-st.sidebar.write(f"T° Max : **{tmax} °C**")
+with st.sidebar.expander("🌤️ Météo (Tavernes)", expanded=True):
+    st.write(f"Pluie 7j : **{precip} mm**")
+    st.write(f"Amplitude T° : **{tmax-tmin:.1f} °C**")
 
-# Indicateur de probabilité
 if precip > 15 and 10 < tmax < 19:
-    st.sidebar.success("✅ PROBABILITÉ ÉLEVÉE")
+    st.sidebar.success("🚀 PROBABILITÉ ÉLEVÉE")
 else:
-    st.sidebar.warning("⏳ ATTENDRE LA PLUIE")
+    st.sidebar.warning("⏳ CONDITIONS MOYENNES")
 
-# Bouton de Sécurité
-st.sidebar.markdown("---")
-st.sidebar.subheader("🚨 Sécurité")
-if st.sidebar.button("Ma Position de Secours"):
-    # Lien Google Maps pour Tavernes par défaut (sera mis à jour par le GPS)
-    st.sidebar.code(f"Je suis vers Tavernes : https://www.google.com/maps?q=43.5936,6.0167")
-    st.sidebar.info("Envoyez ce lien par SMS à un proche.")
+# --- CARTE INTERACTIVE ---
+st.title("🍄 Morel Hunter : Secteur Tavernes")
 
-# --- CARTE PRINCIPALE ---
-st.title("🍄 Scanner à Morilles - Secteur Tavernes")
+tab1, tab2 = st.tabs(["🗺️ Carte de Prospection", "📖 Guide Terrain"])
 
-# Création de la carte centrée sur Tavernes
-m = folium.Map(location=[43.5936, 6.0167], zoom_start=14, tiles=None)
+with tab1:
+    # Initialisation de la carte
+    m = folium.Map(location=[43.5936, 6.0167], zoom_start=14, tiles=None)
 
-# 1. Fond de carte relief (Topographie)
-folium.TileLayer(
-    tiles='https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
-    attr='OpenTopoMap',
-    name='Relief & Vallons'
-).add_to(m)
+    # 1. Fond de carte Relief (OpenTopoMap)
+    folium.TileLayer(
+        tiles='https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
+        attr='OpenTopoMap',
+        name='Relief & Vallons'
+    ).add_to(m)
 
-# 2. Couche Géologique BRGM (Le Calcaire en Bleu/Vert)
-folium.WmsTileLayer(
-    url="https://geoservices.brgm.fr/geologie",
-    layers="GEOLOGIE",
-    fmt="image/png",
-    transparent=True,
-    name="Géologie (Calcaire)",
-    overlay=True,
-    opacity=0.5
-).add_to(m)
+    # 2. Couche Géologique BRGM (Le Calcaire)
+    folium.WmsTileLayer(
+        url="https://geoservices.brgm.fr/geologie",
+        layers="GEOLOGIE",
+        fmt="image/png",
+        transparent=True,
+        name="Géologie (Zones Calcaires)",
+        overlay=True,
+        opacity=0.5
+    ).add_to(m)
 
-# 3. Couche Forêt IGN (Les feuillus)
-folium.WmsTileLayer(
-    url="https://wxs.ign.fr/environnement/geoportail/r/wms",
-    layers="WOODS.FOREST_COMMUNITIES",
-    fmt="image/png",
-    transparent=True,
-    name="Végétation (Feuillus)",
-    overlay=True,
-    opacity=0.3
-).add_to(m)
+    # 3. Couche Végétation (Nouvelle Géoplateforme IGN)
+    folium.WmsTileLayer(
+        url="https://data.geopf.ign.fr/wms-r/wms",
+        layers="LANDCOVER.FORESTINVENTORY.V2",
+        fmt="image/png",
+        transparent=True,
+        name="Végétation (Chercher Feuillus)",
+        overlay=True,
+        opacity=0.4,
+        attr="IGN - BD Forêt"
+    ).add_to(m)
 
-# --- OPTIONS GPS ET BOUTONS ---
-plugins.LocateControl(
-    flyTo=True, 
-    keepCurrentZoomLevel=True,
-    strings={"title": "Où suis-je ?", "popup": "Ma position"}
-).add_to(m)
+    # OUTILS GPS ET CONTRÔLE
+    plugins.LocateControl(flyTo=True, keepCurrentZoomLevel=True).add_to(m)
+    plugins.Fullscreen().add_to(m)
+    folium.LayerControl(collapsed=False).add_to(m)
 
-plugins.Fullscreen(position="topright").add_to(m)
-folium.LayerControl(collapsed=False).add_to(m)
+    # Affichage de la carte
+    st_folium(m, width="100%", height=600)
 
-# Affichage final
-st_folium(m, width="100%", height=600)
-
-# --- GUIDE DE TERRAIN ---
-with st.expander("📖 Guide Rapide Tavernes"):
-    st.write("""
-    * **Zones Bleues/Vertes :** Calcaires du Jurassique. C'est là qu'il faut être.
-    * **Végétation :** Cherchez les Frênes et les Noisetiers dans les vallons.
-    * **Exposition :** En mars, restez sur les pentes qui font face au soleil (Sud).
+with tab2:
+    st.subheader("💡 Conseils pour Tavernes")
+    st.markdown("""
+    - **Géologie :** Les morilles adorent les sols calcaires. Sur la carte, cherchez les zones de couleur **bleu clair ou vert pomme**.
+    - **Végétation :** Activez la couche 'Végétation' et visez les zones de feuillus (souvent en vert plus sombre ou marron) près des ruisseaux.
+    - **Le Choc :** Si vous voyez une pluie > 15mm suivie d'un après-midi à 16°C, les morilles sortiront 3 à 5 jours après.
     """)
 
-st.caption("© Application créée pour la prospection à Tavernes (Var).")
+st.sidebar.markdown("---")
+if st.sidebar.button("🚨 SOS : Partager ma position"):
+    st.sidebar.code("Je suis en prospection à Tavernes. Position centre carte : 43.59, 6.01")
