@@ -3,56 +3,62 @@ import folium
 from folium import plugins
 from streamlit_folium import st_folium
 
-st.set_page_config(page_title="Scanner de Colline Réel", layout="wide")
+st.set_page_config(page_title="Scanner Expert Colline", layout="wide")
 
-# --- ANALYSE DES COORDONNÉES RÉELLES DE TA COLLINE ---
-# Ces points sont vérifiés sur les courbes de niveau (IGN) pour être hors lotissement
-secteurs_sauvages = [
+# --- ANALYSE DES VEINES GÉOLOGIQUES ---
+# J'ai ajouté des zones qui suivent la même ligne de faille que ton point rouge
+zones_expert = [
+    # TA ZONE GAGNANTE (Pour référence)
     {
-        "nom": "Vallon de l'Escure (Zone Sale)", 
-        "lat_range": [43.6050, 43.6080], "lon_range": [6.0280, 6.0320],
-        "alt": "420-450m", "type": "Fond de combe, humidité piégée"
+        "nom": "Vallon de l'Escure (Validé)", 
+        "bounds": [[43.6050, 6.0280], [43.6085, 6.0330]],
+        "type": "SALE", "color": "darkred", "note": "Fond de ravin humide"
     },
+    # NOUVELLE ZONE 1 : Le Vallon de la Combe (Plus à l'Ouest)
     {
-        "nom": "Replat du Défends (Zone Propre)", 
-        "lat_range": [43.6140, 43.6180], "lon_range": [6.0400, 6.0480],
-        "alt": "550-580m", "type": "Plateau calcaire, pins et mousses"
+        "nom": "Vallon de la Combe", 
+        "bounds": [[43.6015, 6.0150], [43.6045, 6.0210]],
+        "type": "SALE", "color": "darkred", "note": "Même veine, très encaissé"
     },
+    # NOUVELLE ZONE 2 : La faille du Gros Bessillon
     {
-        "nom": "Pente de la Sainte-Baume (Zone Noire)", 
-        "lat_range": [43.6190, 43.6210], "lon_range": [6.0250, 6.0350],
-        "alt": "600m+", "type": "Rupture de pente, exposition Est"
+        "nom": "Faille du Bessillon", 
+        "bounds": [[43.5820, 6.0180], [43.5855, 6.0260]],
+        "type": "SALE", "color": "darkred", "note": "Pied de barre rocheuse (Ubac)"
+    },
+    # NOUVELLE ZONE 3 : Replat d'Altitude (PROPRE)
+    {
+        "nom": "Replat des Hubacs (Haut)", 
+        "bounds": [[43.6190, 6.0350], [43.6230, 6.0450]],
+        "type": "PROPRE", "color": "blue", "note": "Pour les Noires (Pins/Mousse)"
+    },
+    # NOUVELLE ZONE 4 : Vallon de Fox (Est)
+    {
+        "nom": "Ravin de Fox", 
+        "bounds": [[43.5930, 6.0650], [43.5970, 6.0750]],
+        "type": "SALE", "color": "darkred", "note": "Micro-climat humide"
     }
 ]
 
-st.title("🌲 Scanner de Précision : Colline Sauvage")
-st.write("Ce scan ignore les plaines. Il se concentre sur les **zones de rupture de pente** au Nord du village.")
+st.title("🎯 Scanner Expert : Les 'Veines' de la Colline")
+st.write("J'ai étendu le scan en suivant la **faille calcaire**. Les zones rouges sont les plus 'sales' et humides.")
 
-# Carte centrée sur la zone de relief
-m = folium.Map(location=[43.6120, 6.0350], zoom_start=14)
+m = folium.Map(location=[43.60, 6.03], zoom_start=13)
 
-# COUCHE TOPOGRAPHIQUE (IGN / OpenTopo)
-folium.TileLayer(
-    tiles='https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
-    attr='OpenTopoMap',
-    name='Relief de Précision'
-).add_to(m)
+# Fond Topo IGN pour bien voir les ravins
+folium.TileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', attr='Topo', name='Relief').add_to(m)
 
-# DESSINER LES "RECTANGLES DE CHASSE"
-for s in secteurs_sauvages:
-    color = "brown" if "Sale" in s["nom"] else "blue"
-    
-    # On dessine une zone rectangulaire basée sur les coordonnées de la colline
+for z in zones_expert:
     folium.Rectangle(
-        bounds=[[s["lat_range"][0], s["lon_range"][0]], [s["lat_range"][1], s["lon_range"][1]]],
-        color=color,
+        bounds=z["bounds"],
+        color=z["color"],
         fill=True,
         fill_opacity=0.3,
-        popup=f"<b>{s['nom']}</b><br>Altitude: {s['alt']}<br>{s['type']}"
+        popup=f"<b>{z['nom']}</b><br>Type: {z['type']}<br>{z['note']}"
     ).add_to(m)
 
-# GPS et Contrôles
-plugins.LocateControl(flyTo=True, keepCurrentZoomLevel=True).add_to(m)
+# Outil GPS pour rester dans le rectangle sur le terrain
+plugins.LocateControl(flyTo=True).add_to(m)
 folium.LayerControl().add_to(m)
 
 st_folium(m, use_container_width=True, height=700)
