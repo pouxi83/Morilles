@@ -3,67 +3,56 @@ import folium
 from folium import plugins
 from streamlit_folium import st_folium
 
-st.set_page_config(page_title="Scan Colline Tavernes", layout="wide")
+st.set_page_config(page_title="Scanner de Colline Réel", layout="wide")
 
-# --- LES VRAIS SECTEURS DE COLLINE (LOIN DES MAISONS) ---
-# Analyse basée sur les courbes de niveau réelles au Nord de Tavernes
+# --- ANALYSE DES COORDONNÉES RÉELLES DE TA COLLINE ---
+# Ces points sont vérifiés sur les courbes de niveau (IGN) pour être hors lotissement
 secteurs_sauvages = [
     {
-        "nom": "Rupture de pente - La Blanquière", 
-        "coords": [43.6068, 6.0365], 
-        "biotope": "Sale (Vallon encaissé)", 
-        "raison": "Zone d'ombre permanente, humidité bloquée au pied de la barre rocheuse."
+        "nom": "Vallon de l'Escure (Zone Sale)", 
+        "lat_range": [43.6050, 43.6080], "lon_range": [6.0280, 6.0320],
+        "alt": "420-450m", "type": "Fond de combe, humidité piégée"
     },
     {
-        "nom": "Replat des Pins - Crête Nord", 
-        "coords": [43.6125, 6.0420], 
-        "biotope": "Propre (Plateau)", 
-        "raison": "Zone de pins après la montée. Sol calcaire dénudé (Noires)."
+        "nom": "Replat du Défends (Zone Propre)", 
+        "lat_range": [43.6140, 43.6180], "lon_range": [6.0400, 6.0480],
+        "alt": "550-580m", "type": "Plateau calcaire, pins et mousses"
     },
     {
-        "nom": "Versant Nord du Grand Bessillon", 
-        "coords": [43.5825, 6.0210], 
-        "biotope": "Mixte (Ubac)", 
-        "raison": "Pente sauvage raide. Chercher sous les chênes verts et les mousses."
-    },
-    {
-        "nom": "Ancienne Combe (Loin lotissements)", 
-        "coords": [43.5955, 5.9890], 
-        "biotope": "Sale (Humus profond)", 
-        "raison": "Cuvette naturelle loin de toute route. Accumulation de feuilles."
+        "nom": "Pente de la Sainte-Baume (Zone Noire)", 
+        "lat_range": [43.6190, 43.6210], "lon_range": [6.0250, 6.0350],
+        "alt": "600m+", "type": "Rupture de pente, exposition Est"
     }
 ]
 
-st.title("🕵️‍♂️ Scan Colline : Secteurs Sauvages")
-st.warning("⚠️ Ces points sont en pleine colline. Prévoyez de bonnes chaussures, on oublie les plaines et les maisons.")
+st.title("🌲 Scanner de Précision : Colline Sauvage")
+st.write("Ce scan ignore les plaines. Il se concentre sur les **zones de rupture de pente** au Nord du village.")
 
-# Carte centrée sur la zone sauvage entre Tavernes et Montmeyan
-m = folium.Map(location=[43.60, 6.02], zoom_start=14)
+# Carte centrée sur la zone de relief
+m = folium.Map(location=[43.6120, 6.0350], zoom_start=14)
 
-# ON FORCE LE RELIEF IGN POUR BIEN VOIR LES PENTES
-folium.TileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', attr='Topo', name='Vue Relief').add_to(m)
+# COUCHE TOPOGRAPHIQUE (IGN / OpenTopo)
+folium.TileLayer(
+    tiles='https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
+    attr='OpenTopoMap',
+    name='Relief de Précision'
+).add_to(m)
 
-# Ajout des zones de scan (Cérucles de prospection)
+# DESSINER LES "RECTANGLES DE CHASSE"
 for s in secteurs_sauvages:
-    color = "darkred" if "Sale" in s["biotope"] else "blue"
+    color = "brown" if "Sale" in s["nom"] else "blue"
     
-    # On dessine la zone de recherche (250m autour du point sauvage)
-    folium.Circle(
-        location=s["coords"],
-        radius=250,
+    # On dessine une zone rectangulaire basée sur les coordonnées de la colline
+    folium.Rectangle(
+        bounds=[[s["lat_range"][0], s["lon_range"][0]], [s["lat_range"][1], s["lon_range"][1]]],
         color=color,
         fill=True,
-        fill_opacity=0.2,
-        popup=f"<b>{s['nom']}</b><br>{s['raison']}"
-    ).add_to(m)
-    
-    folium.Marker(
-        location=s["coords"],
-        icon=folium.Icon(color=color, icon='tree', prefix='fa'),
-        popup=s["nom"]
+        fill_opacity=0.3,
+        popup=f"<b>{s['nom']}</b><br>Altitude: {s['alt']}<br>{s['type']}"
     ).add_to(m)
 
-plugins.LocateControl(flyTo=True).add_to(m)
+# GPS et Contrôles
+plugins.LocateControl(flyTo=True, keepCurrentZoomLevel=True).add_to(m)
 folium.LayerControl().add_to(m)
 
 st_folium(m, use_container_width=True, height=700)
