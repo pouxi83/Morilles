@@ -3,54 +3,54 @@ import folium
 from folium import plugins
 from streamlit_folium import st_folium
 
-st.set_page_config(page_title="Morel Precision Scanner", layout="wide")
+st.set_page_config(page_title="Morel Sniper - Scan Topo", layout="wide")
 
-st.title("🛡️ Scanner de Précision Géologique - Tavernes")
+st.title("🕵️‍♂️ Scanner de Relief Réel : Tavernes")
 st.markdown("""
-**Arrêtons les suppositions.** Cette carte affiche les données réelles du sous-sol. 
-1. Regarde les zones **bleues/violettes** : c'est le calcaire (le seul endroit où il y a des morilles).
-2. Superpose avec la couche **Forêt** pour éviter les habitations.
+**Mode d'emploi :** 1. Active la couche **'Carte des Pentes'**. 
+2. Les zones **jaunes/oranges** (pentes 10-25%) sont tes zones de 'Sale' (ravins). 
+3. Les zones **blanches en altitude** sont les replats 'Propres' (Noires).
 """)
 
-# Centrage précis sur la zone sauvage entre Tavernes et Fox-Amphoux
-m = folium.Map(location=[43.5950, 6.0400], zoom_start=14, tiles=None)
+# Centrage sur le massif sauvage (Le Défends / Bessillon) - On évite le village.
+m = folium.Map(location=[43.6100, 6.0350], zoom_start=14, tiles=None)
 
-# 1. Fond Relief Topo (Pour voir les pentes et les ravins)
-folium.TileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', attr='OpenTopoMap', name='1. Relief & Ravins').add_to(m)
+# 1. Fond Image Satellite (Pour voir les vrais arbres)
+folium.TileLayer(
+    tiles='https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    attr='Esri',
+    name='1. Vue Satellite'
+).add_to(m)
 
-# 2. Couche Géologique BRGM (INDISPENSABLE)
-# Le calcaire Jurassique est la clé. Si c'est pas sur cette couche, y'a rien.
+# 2. La Carte des Pentes IGN (LA référence pour le chasseur)
+# Elle colore le relief : Jaune = Pente douce, Orange = Pente moyenne, Violet = Falaise.
 folium.WmsTileLayer(
-    url="https://geoservices.brgm.fr/geologie",
-    layers="GEOLOGIE",
-    name="2. Géologie (Chercher le Bleu/Violet)",
+    url="https://data.geopf.ign.fr/wms-r/wms",
+    layers="GEOGRAPHICALGRIDSYSTEMS.SLOPES.3D",
+    name="2. Analyse des Pentes (IGN)",
     fmt="image/png",
     transparent=True,
     opacity=0.6
 ).add_to(m)
 
-# 3. Couche Forêt IGN (Pour éviter les maisons)
-folium.WmsTileLayer(
-    url="https://data.geopf.ign.fr/wms-r/wms",
-    layers="LANDCOVER.FORESTINVENTORY.V2",
-    name="3. Forêt (Éviter le blanc = maisons)",
-    fmt="image/png",
-    transparent=True,
-    opacity=0.4
-).add_to(m)
-
-# 4. Couche Ruisseaux (Pour le 'Sale')
+# 3. Réseau Hydrographique (Pour trouver le fond des ravins)
 folium.WmsTileLayer(
     url="https://data.geopf.ign.fr/wms-r/wms",
     layers="HYDROGRAPHY.NETWORK",
-    name="4. Ruisseaux & Vallons",
+    name="3. Ruisseaux et Talwegs",
     fmt="image/png",
     transparent=True,
     opacity=0.8
 ).add_to(m)
 
-# Outil GPS pour que tu te vois avancer dans la colline
-plugins.LocateControl(flyTo=True, keepCurrentZoomLevel=True).add_to(m)
+# Outil GPS (Indispensable quand tu es dans la colline)
+plugins.LocateControl(
+    flyTo=True, 
+    keepCurrentZoomLevel=True,
+    strings={"title": "Ma position réelle"}
+).add_to(m)
+
+# Ajout d'une échelle pour mesurer la distance des barres rocheuses
 folium.LayerControl(collapsed=False).add_to(m)
 
 st_folium(m, use_container_width=True, height=750)
